@@ -23,7 +23,6 @@ import {
 } from '../../common/validation/input-patterns.js';
 import {
   MAX_PRODUCT_ATTRIBUTES,
-  MAX_PRODUCT_IMAGES,
   MAX_PRODUCT_VARIANTS,
 } from '../products.constants.js';
 import { ProductMetadataDto } from './product-metadata.dto.js';
@@ -80,35 +79,6 @@ export class CreateProductVariantDto {
   options: ProductVariantOptionDto[] = [];
 }
 
-export class CreateProductImageDto {
-  @Transform(({ value }) => trimString(value))
-  @IsString()
-  @MinLength(1)
-  @MaxLength(2_048)
-  imageUrl: string;
-
-  @Transform(({ value }) => trimString(value))
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(255)
-  altText?: string | null;
-
-  @IsInt()
-  @Min(0)
-  @Max(POSTGRES_INTEGER_MAX)
-  sortOrder: number;
-
-  @Transform(({ value }) =>
-    typeof value === 'string' ? normalizeSku(value) : value,
-  )
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(100)
-  variantSku?: string;
-}
-
 export class CreateProductDto extends ProductMetadataDto {
   override currencyCode = 'USD';
   override isActive = true;
@@ -125,10 +95,4 @@ export class CreateProductDto extends ProductMetadataDto {
   @ValidateNested({ each: true })
   @Type(() => CreateProductVariantDto)
   variants: CreateProductVariantDto[];
-
-  @IsArray()
-  @ArrayMaxSize(MAX_PRODUCT_IMAGES)
-  @ValidateNested({ each: true })
-  @Type(() => CreateProductImageDto)
-  images: CreateProductImageDto[] = [];
 }

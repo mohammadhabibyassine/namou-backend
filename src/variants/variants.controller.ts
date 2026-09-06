@@ -69,4 +69,11 @@ export class VariantsController {
   ): Promise<ProductImageAdminView[]> {
     return this.variantsService.replaceImages(productId, input);
   }
+
+  @Get('images')
+  findImages(
+    @Param('productId', UUID_V4_PIPE) productId: string,
+  ): Promise<ProductImageAdminView[]> {
+    return this.variantsService.findImages(productId);
+  }
 }

@@ -10,6 +10,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  Matches,
   ValidateNested,
 } from 'class-validator';
 import { trimString } from '../../common/normalizers/string.normalizer.js';
@@ -22,10 +23,12 @@ export class ReplacementProductImageDto {
   id?: string;
 
   @Transform(({ value }) => trimString(value))
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  @MaxLength(2_048)
-  imageUrl: string;
+  @MaxLength(512)
+  @Matches(/^products\/[0-9a-f-]+\/[0-9a-f-]+\.(?:jpg|png|webp|avif)$/i)
+  objectKey?: string;
 
   @Transform(({ value }) => trimString(value))
   @IsOptional()

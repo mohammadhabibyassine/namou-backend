@@ -15,6 +15,7 @@ import { VariantsService } from '../src/variants/variants.service.js';
 import { WishlistService } from '../src/wishlist/wishlist.service.js';
 import type { ApplicationCacheService } from '../src/cache/application-cache.service.js';
 import type { OrderJobsService } from '../src/jobs/order-jobs.service.js';
+import type { StorageService } from '../src/storage/storage.service.js';
 
 const ROLLBACK = new Error('intentional commerce smoke-test rollback');
 const noOpCache = {
@@ -29,6 +30,10 @@ const noOpCache = {
 const noOpOrderJobs = {
   enqueueConfirmation: async () => undefined,
 } as unknown as OrderJobsService;
+const noOpStorage = {
+  verifyProductObject: async (_productId: string, objectKey: string) =>
+    `https://media.namou.test/${objectKey}`,
+} as unknown as StorageService;
 
 describe('Commerce database workflows (e2e)', () => {
   let moduleFixture: TestingModule;
@@ -60,7 +65,11 @@ describe('Commerce database workflows (e2e)', () => {
             new ProductsRepository(client),
             noOpCache,
           );
-          const variants = new VariantsService(client, noOpCache);
+          const variants = new VariantsService(
+            client,
+            noOpCache,
+            noOpStorage,
+          );
           const users = new UsersService(client);
           const cart = new CartService(client);
           const wishlist = new WishlistService(client);
@@ -183,7 +192,7 @@ describe('Commerce database workflows (e2e)', () => {
           const images = await variants.replaceImages(createdProduct.id, {
             images: [
               {
-                imageUrl: 'products/smoke/main.webp',
+                objectKey: `products/${createdProduct.id}/${randomUUID()}.webp`,
                 altText: 'Smoke shirt',
                 sortOrder: 0,
                 variantId: redVariant.id,

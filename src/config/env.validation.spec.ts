@@ -10,6 +10,12 @@ const validEnvironment = {
   JWT_ISSUER: 'namou',
   JWT_AUDIENCE: 'namou-api',
   REFRESH_TOKEN_TTL_DAYS: '30',
+  R2_ACCOUNT_ID: 'test-account',
+  R2_ACCESS_KEY_ID: 'test-access-key',
+  R2_SECRET_ACCESS_KEY: 'test-secret-key',
+  R2_BUCKET_NAME: 'test-bucket',
+  R2_PUBLIC_URL: 'https://media.namou.test',
+  R2_PRESIGNED_URL_TTL_SECONDS: '600',
 };
 
 describe('validateEnvironment', () => {
@@ -19,6 +25,7 @@ describe('validateEnvironment', () => {
     expect(result.PORT).toBe(3001);
     expect(result.JWT_ACCESS_TTL_SECONDS).toBe(900);
     expect(result.REFRESH_TOKEN_TTL_DAYS).toBe(30);
+    expect(result.R2_PRESIGNED_URL_TTL_SECONDS).toBe(600);
   });
 
   it('rejects a missing JWT access secret', () => {

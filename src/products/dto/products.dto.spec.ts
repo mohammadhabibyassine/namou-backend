@@ -74,13 +74,6 @@ describe('CreateProductDto', () => {
           isDefault: true,
         },
       ],
-      images: [
-        {
-          imageUrl: ' products/trainer/main.webp ',
-          sortOrder: 0,
-          variantSku: ' trainer-default ',
-        },
-      ],
     });
 
     await expect(validate(input)).resolves.toHaveLength(0);
@@ -99,17 +92,10 @@ describe('CreateProductDto', () => {
           options: [],
         },
       ],
-      images: [
-        {
-          imageUrl: 'products/trainer/main.webp',
-          sortOrder: 0,
-          variantSku: 'TRAINER-DEFAULT',
-        },
-      ],
     });
   });
 
-  it('validates nested variants and images rather than trusting plain objects', async () => {
+  it('validates nested variants rather than trusting plain objects', async () => {
     const input = plainToInstance(CreateProductDto, {
       categoryId: 'not-a-uuid',
       title: '',
@@ -122,7 +108,6 @@ describe('CreateProductDto', () => {
           options: [{ attributeTypeId: 'bad', attributeValueId: 'bad' }],
         },
       ],
-      images: [{ imageUrl: '', sortOrder: -1 }],
     });
 
     const errors = await validate(input);
@@ -133,7 +118,6 @@ describe('CreateProductDto', () => {
         'slug',
         'basePrice',
         'variants',
-        'images',
       ]),
     );
   });

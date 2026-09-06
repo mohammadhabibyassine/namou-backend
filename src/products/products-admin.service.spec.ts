@@ -57,14 +57,6 @@ function productInput(
         options: [],
       },
     ],
-    images: [
-      {
-        imageUrl: 'products/trainer/main.webp',
-        altText: 'Everyday trainer',
-        sortOrder: 0,
-        variantSku: ' TRAINER-DEFAULT ',
-      },
-    ],
     ...overrides,
   };
 }
@@ -82,7 +74,6 @@ describe('ProductsAdminService', () => {
   const productVariantCreateManyAndReturn = vi.fn();
   const productVariantUpdateMany = vi.fn();
   const variantAttributeValueCreateMany = vi.fn();
-  const productImageCreateMany = vi.fn();
   const tx = {
     $queryRaw: queryRaw,
     product: { create: productCreate, update: productUpdate },
@@ -95,7 +86,6 @@ describe('ProductsAdminService', () => {
       updateMany: productVariantUpdateMany,
     },
     variantAttributeValue: { createMany: variantAttributeValueCreateMany },
-    productImage: { createMany: productImageCreateMany },
   };
   const transaction = vi.fn(
     async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
@@ -133,7 +123,7 @@ describe('ProductsAdminService', () => {
     productVariantUpdateMany.mockResolvedValue({ count: 1 });
   });
 
-  it('creates a stock-owning default variant and resolves image links atomically', async () => {
+  it('creates a stock-owning default variant atomically', async () => {
     await expect(service.create(productInput())).resolves.toEqual({
       id: '046b61d4-dc6b-46b0-a935-54ac59d0f98b',
       slug: 'everyday-trainer',
@@ -164,14 +154,6 @@ describe('ProductsAdminService', () => {
         }),
       ],
       select: { id: true, sku: true },
-    });
-    expect(productImageCreateMany).toHaveBeenCalledWith({
-      data: [
-        expect.objectContaining({
-          variantId: '8eac816f-9119-42e7-b784-f16623aad3d0',
-          imageUrl: 'products/trainer/main.webp',
-        }),
-      ],
     });
     expect(productAttributeTypeCreateMany).not.toHaveBeenCalled();
     expect(variantAttributeValueCreateMany).not.toHaveBeenCalled();
@@ -218,7 +200,6 @@ describe('ProductsAdminService', () => {
             ],
           },
         ],
-        images: [],
       }),
     );
 
@@ -337,34 +318,6 @@ describe('ProductsAdminService', () => {
       }),
       message: 'Variant attribute combinations must be unique',
     },
-    {
-      name: 'duplicate image positions',
-      input: productInput({
-        images: [
-          ...productInput().images,
-          {
-            imageUrl: 'products/trainer/second.webp',
-            altText: null,
-            sortOrder: 0,
-          },
-        ],
-      }),
-      message: 'Product image sort orders must be unique',
-    },
-    {
-      name: 'an unknown image SKU',
-      input: productInput({
-        images: [
-          {
-            imageUrl: 'products/trainer/main.webp',
-            altText: null,
-            sortOrder: 0,
-            variantSku: 'unknown-sku',
-          },
-        ],
-      }),
-      message: 'Every image variantSku must reference a submitted variant',
-    },
   ])(
     'rejects $name before opening a transaction',
     async ({ input, message }) => {
@@ -400,7 +353,6 @@ describe('ProductsAdminService', () => {
               ],
             },
           ],
-          images: [],
         }),
       ),
     ).rejects.toMatchObject({

@@ -15,14 +15,16 @@ import { validateEnvironment } from './config/env.validation.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { authConfig } from './config/auth.config.js';
 import { redisConfig } from './config/redis.config.js';
+import { storageConfig } from './config/storage.config.js';
 import { ApplicationCacheModule } from './cache/application-cache.module.js';
+import { StorageModule } from './storage/storage.module.js';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       cache: true,
-      load: [authConfig, redisConfig],
+      load: [authConfig, redisConfig, storageConfig],
       validate: validateEnvironment,
     }),
     PrismaModule,
@@ -36,6 +38,7 @@ import { ApplicationCacheModule } from './cache/application-cache.module.js';
     WishlistModule,
     OrdersModule,
     ChatModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

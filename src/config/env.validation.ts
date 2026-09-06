@@ -2,6 +2,7 @@ import { plainToInstance, Type } from 'class-transformer';
 import {
   IsEnum,
   IsInt,
+  IsOptional,
   IsString,
   IsUrl,
   Max,
@@ -64,6 +65,32 @@ class EnvironmentVariables {
   @Min(1)
   @Max(365)
   REFRESH_TOKEN_TTL_DAYS = 30;
+
+  @IsString()
+  @MinLength(1)
+  R2_ACCOUNT_ID: string;
+
+  @IsString()
+  @MinLength(1)
+  R2_ACCESS_KEY_ID: string;
+
+  @IsString()
+  @MinLength(1)
+  R2_SECRET_ACCESS_KEY: string;
+
+  @IsString()
+  @MinLength(1)
+  R2_BUCKET_NAME: string;
+
+  @IsUrl({ require_tld: false })
+  R2_PUBLIC_URL: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(60)
+  @Max(3_600)
+  R2_PRESIGNED_URL_TTL_SECONDS?: number;
 }
 
 function formatValidationErrors(errors: ValidationError[]): string {

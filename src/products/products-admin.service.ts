@@ -18,7 +18,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   CreateProductDto,
-  CreateProductImageDto,
   CreateProductVariantDto,
   ProductVariantOptionDto,
 } from './dto/create-product.dto.js';
@@ -55,10 +54,6 @@ interface PreparedVariant extends Omit<
   options: ProductVariantOptionDto[];
 }
 
-interface PreparedImage extends Omit<CreateProductImageDto, 'variantSku'> {
-  variantSku?: string;
-}
-
 interface PreparedProduct {
   categoryId: string;
   title: string;
@@ -69,7 +64,6 @@ interface PreparedProduct {
   isActive: boolean;
   attributes: CreateProductDto['attributes'];
   variants: PreparedVariant[];
-  images: PreparedImage[];
   offeredAttributeValues: OfferedAttributeValue[];
 }
 
@@ -254,20 +248,6 @@ export class ProductsAdminService {
       await tx.variantAttributeValue.createMany({ data: variantOptions });
     }
 
-    if (input.images.length > 0) {
-      await tx.productImage.createMany({
-        data: input.images.map((image) => ({
-          productId: product.id,
-          variantId: image.variantSku
-            ? this.getCreatedVariantId(variantIdsBySku, image.variantSku)
-            : null,
-          imageUrl: image.imageUrl,
-          altText: image.altText ?? null,
-          sortOrder: image.sortOrder,
-        })),
-      });
-    }
-
     return product;
   }
 
@@ -341,30 +321,6 @@ export class ProductsAdminService {
       input.attributes ?? [],
       input.variants,
     );
-    const images = (input.images ?? []).map((image) => ({
-      ...image,
-      imageUrl: image.imageUrl.trim(),
-      altText: image.altText?.trim() ?? null,
-      variantSku: image.variantSku ? normalizeSku(image.variantSku) : undefined,
-    }));
-    const imageSortOrders = new Set(images.map((image) => image.sortOrder));
-    if (imageSortOrders.size !== images.length) {
-      throw new BadRequestException('Product image sort orders must be unique');
-    }
-    if (
-      images.some(
-        (image) =>
-          image.variantSku &&
-          !configuration.variants.some(
-            (variant) => variant.sku === image.variantSku,
-          ),
-      )
-    ) {
-      throw new BadRequestException(
-        'Every image variantSku must reference a submitted variant',
-      );
-    }
-
     return {
       categoryId: input.categoryId,
       title: input.title.trim(),
@@ -375,7 +331,6 @@ export class ProductsAdminService {
       isActive: input.isActive,
       attributes: configuration.attributes,
       variants: configuration.variants,
-      images,
       offeredAttributeValues: configuration.offeredAttributeValues,
     };
   }

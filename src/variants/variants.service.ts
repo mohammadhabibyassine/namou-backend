@@ -16,6 +16,7 @@ import {
   isPrismaKnownRequestError,
 } from '../prisma/prisma-error.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { StorageService } from '../storage/storage.service.js';
 import type { ReplaceProductImagesDto } from './dto/replace-product-images.dto.js';
 import type { ReplaceVariantConfigurationDto } from './dto/replace-variant-configuration.dto.js';
 import type { UpdateVariantDto } from './dto/update-variant.dto.js';
@@ -39,6 +40,7 @@ export class VariantsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: ApplicationCacheService,
+    private readonly storage: StorageService,
   ) {}
 
   async findConfiguration(
@@ -291,6 +293,15 @@ export class VariantsService {
     productId: string,
     input: ReplaceProductImagesDto,
   ): Promise<ProductImageAdminView[]> {
+    if (
+      input.images.some(
+        (image) => Boolean(image.id) === Boolean(image.objectKey),
+      )
+    ) {
+      throw new BadRequestException(
+        'Every image must provide either an existing id or a new objectKey',
+      );
+    }
     const ids = input.images.flatMap((image) => (image.id ? [image.id] : []));
     if (new Set(ids).size !== ids.length) {
       throw new BadRequestException('Existing image IDs must be unique');
@@ -301,15 +312,33 @@ export class VariantsService {
     ) {
       throw new BadRequestException('Product image sort orders must be unique');
     }
+    const objectKeys = input.images.flatMap((image) =>
+      image.objectKey ? [image.objectKey] : [],
+    );
+    if (new Set(objectKeys).size !== objectKeys.length) {
+      throw new BadRequestException('Uploaded image object keys must be unique');
+    }
+
+    const uploadedImageUrls = new Map(
+      await Promise.all(
+        objectKeys.map(async (objectKey) => [
+          objectKey,
+          await this.storage.verifyProductObject(productId, objectKey),
+        ] as const),
+      ),
+    );
 
     try {
       const images = await this.prisma.$transaction(async (tx) => {
         await this.lockProduct(tx, productId);
         const existing = await tx.productImage.findMany({
           where: { productId },
-          select: { id: true },
+          select: { id: true, imageUrl: true },
         });
-        const existingIds = new Set(existing.map(({ id }) => id));
+        const existingImages = new Map(
+          existing.map((image) => [image.id, image]),
+        );
+        const existingIds = new Set(existingImages.keys());
         if (ids.some((id) => !existingIds.has(id))) {
           throw new BadRequestException(
             'Every submitted image id must belong to this product',
@@ -338,8 +367,14 @@ export class VariantsService {
           where: { productId, id: { notIn: ids } },
         });
         for (const image of input.images) {
+          const imageUrl = image.id
+            ? existingImages.get(image.id)?.imageUrl
+            : uploadedImageUrls.get(image.objectKey ?? '');
+          if (!imageUrl) {
+            throw new BadRequestException('Product image could not be resolved');
+          }
           const data = {
-            imageUrl: image.imageUrl.trim(),
+            imageUrl,
             altText: image.altText?.trim() ?? null,
             sortOrder: image.sortOrder,
             variantId: image.variantId ?? null,
@@ -370,6 +405,20 @@ export class VariantsService {
     } catch (error: unknown) {
       this.rethrowWriteError(error);
     }
+  }
+
+  async findImages(productId: string): Promise<ProductImageAdminView[]> {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId, deletedAt: null },
+      select: {
+        images: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+          select: ADMIN_IMAGE_SELECT,
+        },
+      },
+    });
+    if (!product) throw this.productNotFound();
+    return product.images.map((image) => this.toImageView(image));
   }
 
   private async lockProduct(tx: Prisma.TransactionClient, productId: string) {

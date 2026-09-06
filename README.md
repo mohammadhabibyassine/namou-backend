@@ -159,3 +159,4 @@ Prisma resolves nested relations on its single transaction connection. This is
 tracked upstream in [prisma/prisma#29407](https://github.com/prisma/prisma/issues/29407);
 the queries still complete, and the application does not launch work with
 unawaited promises.
+# namou-backend

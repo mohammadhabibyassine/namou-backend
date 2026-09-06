@@ -1,0 +1,463 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// The SQL migration history is the source of truth for the physical database.
+// This curated mapping gives Prisma Client idiomatic TypeScript names without
+// renaming any PostgreSQL tables, columns, constraints, or indexes.
+
+model AttributeType {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique @db.Citext
+  slug      String   @unique @db.Citext
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  values                AttributeValue[]
+  productAttributeTypes ProductAttributeType[]
+
+  @@map("attribute_types")
+}
+
+model AttributeValue {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  attributeTypeId String   @map("attribute_type_id") @db.Uuid
+  value           String   @db.Citext
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  attributeType          AttributeType           @relation(fields: [attributeTypeId], references: [id], onUpdate: NoAction)
+  productAttributeValues ProductAttributeValue[]
+
+  @@unique([attributeTypeId, value])
+  @@unique([id, attributeTypeId])
+  @@map("attribute_values")
+}
+
+model CartItem {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  variantId String   @map("variant_id") @db.Uuid
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onUpdate: NoAction)
+
+  @@unique([userId, variantId])
+  @@index([variantId], map: "idx_cart_items_variant_id")
+  @@map("cart_items")
+}
+
+model Category {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  parentId    String?   @map("parent_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  slug        String    @unique @db.Citext
+  description String?
+  sortOrder   Int       @default(0) @map("sort_order")
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@index([parentId, sortOrder, name], map: "idx_categories_active_parent_sort", where: raw("(deleted_at IS NULL)"))
+  @@index([parentId, sortOrder, name], map: "idx_categories_parent_sort")
+  @@map("categories")
+}
+
+model ChatConversation {
+  id              String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String                 @map("user_id") @db.Uuid
+  assignedAdminId String?                @map("assigned_admin_id") @db.Uuid
+  subject         String?                @db.VarChar(255)
+  status          ChatConversationStatus @default(open)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime               @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user          User          @relation("CustomerChatConversations", fields: [userId], references: [id], onUpdate: NoAction)
+  assignedAdmin User?         @relation("AssignedAdminChatConversations", fields: [assignedAdminId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  messages      ChatMessage[]
+
+  @@index([assignedAdminId, status, updatedAt(sort: Desc)], map: "idx_chat_conversations_admin_status_updated", where: raw("(assigned_admin_id IS NOT NULL)"))
+  @@index([userId, updatedAt(sort: Desc)], map: "idx_chat_conversations_user_updated")
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String    @map("conversation_id") @db.Uuid
+  senderId       String    @map("sender_id") @db.Uuid
+  content        String
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  sender       User             @relation(fields: [senderId], references: [id], onUpdate: NoAction)
+
+  @@index([senderId], map: "idx_chat_messages_sender_id")
+  @@index([conversationId, createdAt, id], map: "idx_chat_messages_timeline")
+  @@index([conversationId, createdAt], map: "idx_chat_messages_unread", where: raw("(read_at IS NULL)"))
+  @@map("chat_messages")
+}
+
+model OrderItem {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId      String   @map("order_id") @db.Uuid
+  productId    String   @map("product_id") @db.Uuid
+  variantId    String   @map("variant_id") @db.Uuid
+  productTitle String   @map("product_title") @db.VarChar(255)
+  variantLabel String?  @map("variant_label")
+  sku          String   @db.VarChar(100)
+  imageUrl     String?  @map("image_url")
+  unitPrice    Decimal  @map("unit_price") @db.Decimal(12, 2)
+  quantity     Int
+  lineTotal    Decimal? @default(dbgenerated("((unit_price * (quantity)::numeric))::numeric(18,2)")) @map("line_total") @db.Decimal(18, 2)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product Product        @relation(fields: [productId], references: [id], onUpdate: NoAction)
+  variant ProductVariant @relation(fields: [variantId, productId], references: [id, productId], onUpdate: NoAction)
+
+  @@index([orderId], map: "idx_order_items_order_id")
+  @@index([variantId, productId], map: "idx_order_items_variant")
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId    String       @map("order_id") @db.Uuid
+  fromStatus OrderStatus? @map("from_status")
+  toStatus   OrderStatus  @map("to_status")
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([orderId, createdAt, id], map: "idx_order_status_history_timeline")
+  @@map("order_status_history")
+}
+
+model Order {
+  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String      @map("user_id") @db.Uuid
+  orderNumber           String      @unique @map("order_number") @db.VarChar(30)
+  status                OrderStatus @default(pending)
+  subtotal              Decimal     @default(0) @db.Decimal(14, 2)
+  discountAmount        Decimal     @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  shippingCost          Decimal     @default(0) @map("shipping_cost") @db.Decimal(14, 2)
+  taxAmount             Decimal     @default(0) @map("tax_amount") @db.Decimal(14, 2)
+  total                 Decimal?    @default(dbgenerated("(((subtotal - discount_amount) + shipping_cost) + tax_amount)")) @db.Decimal(14, 2)
+  currencyCode          String      @map("currency_code") @db.VarChar(3)
+  shippingRecipientName String      @map("shipping_recipient_name") @db.VarChar(200)
+  shippingAddressLine1  String      @map("shipping_address_line_1") @db.VarChar(255)
+  shippingAddressLine2  String?     @map("shipping_address_line_2") @db.VarChar(255)
+  shippingCity          String      @map("shipping_city") @db.VarChar(100)
+  shippingState         String?     @map("shipping_state") @db.VarChar(100)
+  shippingPostalCode    String      @map("shipping_postal_code") @db.VarChar(20)
+  shippingCountryCode   String      @map("shipping_country_code") @db.VarChar(2)
+  shippingPhone         String?     @map("shipping_phone") @db.VarChar(32)
+  notes                 String?
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime    @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user          User                 @relation(fields: [userId], references: [id], onUpdate: NoAction)
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+
+  @@index([status, createdAt(sort: Desc)], map: "idx_orders_status_created")
+  @@index([userId, createdAt(sort: Desc)], map: "idx_orders_user_created")
+  @@map("orders")
+}
+
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique @db.Citext
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model ProductAttributeType {
+  productId       String   @map("product_id") @db.Uuid
+  attributeTypeId String   @map("attribute_type_id") @db.Uuid
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  product         Product                 @relation(fields: [productId], references: [id], onUpdate: NoAction)
+  attributeType   AttributeType           @relation(fields: [attributeTypeId], references: [id], onUpdate: NoAction)
+  attributeValues ProductAttributeValue[]
+
+  @@id([productId, attributeTypeId])
+  @@index([attributeTypeId, productId], map: "idx_product_attribute_types_type_id")
+  @@map("product_attribute_types")
+}
+
+model ProductAttributeValue {
+  productId        String   @map("product_id") @db.Uuid
+  attributeTypeId  String   @map("attribute_type_id") @db.Uuid
+  attributeValueId String   @map("attribute_value_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  attributeValue         AttributeValue          @relation(fields: [attributeValueId, attributeTypeId], references: [id, attributeTypeId], onUpdate: NoAction)
+  productAttributeType   ProductAttributeType    @relation(fields: [productId, attributeTypeId], references: [productId, attributeTypeId], onDelete: Cascade, onUpdate: NoAction)
+  variantAttributeValues VariantAttributeValue[]
+
+  @@id([productId, attributeValueId])
+  @@unique([productId, attributeTypeId, attributeValueId])
+  @@index([attributeValueId, productId], map: "idx_product_attribute_values_value_id")
+  @@map("product_attribute_values")
+}
+
+model ProductImage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  variantId String?  @map("variant_id") @db.Uuid
+  imageUrl  String   @map("image_url")
+  altText   String?  @map("alt_text") @db.VarChar(255)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  product Product         @relation(fields: [productId], references: [id], onUpdate: NoAction)
+  variant ProductVariant? @relation(fields: [variantId, productId], references: [id, productId], onUpdate: NoAction)
+
+  @@unique([productId, sortOrder])
+  @@index([variantId, productId], map: "idx_product_images_variant", where: raw("(variant_id IS NOT NULL)"))
+  @@map("product_images")
+}
+
+model ProductVariant {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId            String    @map("product_id") @db.Uuid
+  sku                  String    @unique @db.Citext
+  priceOverride        Decimal?  @map("price_override") @db.Decimal(12, 2)
+  effectivePrice       Decimal   @map("effective_price") @db.Decimal(12, 2)
+  stockQuantity        Int       @default(0) @map("stock_quantity")
+  isDefault            Boolean   @default(false) @map("is_default")
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(6)
+  combinationProductId String?   @map("combination_product_id") @db.Uuid
+  combinationSignature Json      @default("{}") @map("combination_signature")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  product            Product                 @relation("ProductVariants", fields: [productId], references: [id], onUpdate: NoAction)
+  combinationProduct Product?                @relation("ProductCombinationVariants", fields: [combinationProductId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  cartItems          CartItem[]
+  orderItems         OrderItem[]
+  images             ProductImage[]
+  attributeValues    VariantAttributeValue[]
+  wishlistItems      WishlistItem[]
+
+  // These are model-level partial uniques so Prisma keeps the Product-to-Variant
+  // relation one-to-many while PostgreSQL enforces one active default variant.
+  @@unique([productId], map: "uq_variants_one_active_default", where: raw("(is_default AND (deleted_at IS NULL))"))
+  @@unique([combinationProductId, combinationSignature])
+  @@unique([id, productId])
+  @@index([effectivePrice, productId], map: "idx_variants_active_effective_price", where: raw("(deleted_at IS NULL)"))
+  @@index([productId], map: "idx_variants_active_product", where: raw("(deleted_at IS NULL)"))
+  @@index([productId, effectivePrice], map: "idx_variants_in_stock", where: raw("((deleted_at IS NULL) AND (stock_quantity > 0))"))
+  @@map("product_variants")
+}
+
+model Product {
+  id           String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId   String                   @map("category_id") @db.Uuid
+  title        String                   @db.VarChar(255)
+  slug         String                   @unique @db.Citext
+  description  String?
+  basePrice    Decimal                  @map("base_price") @db.Decimal(12, 2)
+  currencyCode String                   @default("USD") @map("currency_code") @db.VarChar(3)
+  isActive     Boolean                  @default(true) @map("is_active")
+  deletedAt    DateTime?                @map("deleted_at") @db.Timestamptz(6)
+  createdAt    DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                 @default(now()) @map("updated_at") @db.Timestamptz(6)
+  searchVector Unsupported("tsvector")? @default(dbgenerated("(setweight(to_tsvector('simple'::regconfig, (COALESCE(title, ''::character varying))::text), 'A'::\"char\") || setweight(to_tsvector('simple'::regconfig, COALESCE(description, ''::text)), 'B'::\"char\"))")) @map("search_vector")
+
+  category            Category               @relation(fields: [categoryId], references: [id], onUpdate: NoAction)
+  variants            ProductVariant[]       @relation("ProductVariants")
+  combinationVariants ProductVariant[]       @relation("ProductCombinationVariants")
+  attributeTypes      ProductAttributeType[]
+  images              ProductImage[]
+  orderItems          OrderItem[]
+  wishlistItems       WishlistItem[]
+
+  @@index([categoryId, basePrice], map: "idx_products_active_category_base_price", where: raw("(is_active AND (deleted_at IS NULL))"))
+  @@index([categoryId, createdAt(sort: Desc)], map: "idx_products_active_category_created", where: raw("(is_active AND (deleted_at IS NULL))"))
+  @@index([searchVector], map: "idx_products_active_search", type: Gin, where: raw("(is_active AND (deleted_at IS NULL))"))
+  @@index([categoryId], map: "idx_products_category_id")
+  @@map("products")
+}
+
+model RefreshToken {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  tokenHash         String    @unique @map("token_hash") @db.Char(64)
+  tokenFamilyId     String    @default(dbgenerated("gen_random_uuid()")) @map("token_family_id") @db.Uuid
+  replacedByTokenId String?   @map("replaced_by_token_id") @db.Uuid
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
+  deviceInfo        String?   @map("device_info")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  replacedByToken RefreshToken?  @relation("RefreshTokenRotation", fields: [replacedByTokenId], references: [id], onUpdate: NoAction)
+  previousTokens  RefreshToken[] @relation("RefreshTokenRotation")
+
+  @@index([userId, expiresAt], map: "idx_refresh_tokens_active_user", where: raw("(revoked_at IS NULL)"))
+  @@index([expiresAt], map: "idx_refresh_tokens_expiry_cleanup", where: raw("(revoked_at IS NULL)"))
+  @@index([tokenFamilyId, createdAt], map: "idx_refresh_tokens_family")
+  @@map("refresh_tokens")
+}
+
+model RolePermission {
+  roleId       String   @map("role_id") @db.Uuid
+  permissionId String   @map("permission_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId], map: "idx_role_permissions_permission_id")
+  @@map("role_permissions")
+}
+
+model Role {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique @db.Citext
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  permissions RolePermission[]
+  users       User[]
+
+  @@map("roles")
+}
+
+model UserAddress {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  label         String?   @db.VarChar(50)
+  recipientName String    @map("recipient_name") @db.VarChar(200)
+  addressLine1  String    @map("address_line_1") @db.VarChar(255)
+  addressLine2  String?   @map("address_line_2") @db.VarChar(255)
+  city          String    @db.VarChar(100)
+  state         String?   @db.VarChar(100)
+  postalCode    String    @map("postal_code") @db.VarChar(20)
+  countryCode   String    @map("country_code") @db.VarChar(2)
+  phone         String?   @db.VarChar(32)
+  isDefault     Boolean   @default(false) @map("is_default")
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  // Model-level for the same reason as ProductVariant's active-default index.
+  @@unique([userId], map: "uq_user_addresses_one_active_default", where: raw("(is_default AND (deleted_at IS NULL))"))
+  @@index([userId], map: "idx_user_addresses_active_user", where: raw("(deleted_at IS NULL)"))
+  @@map("user_addresses")
+}
+
+model User {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String    @unique @db.Citext
+  passwordHash    String    @map("password_hash") @db.VarChar(255)
+  firstName       String?   @map("first_name") @db.VarChar(100)
+  lastName        String?   @map("last_name") @db.VarChar(100)
+  phone           String?   @db.VarChar(32)
+  roleId          String    @map("role_id") @db.Uuid
+  isActive        Boolean   @default(true) @map("is_active")
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  role                  Role               @relation(fields: [roleId], references: [id], onUpdate: NoAction)
+  addresses             UserAddress[]
+  cartItems             CartItem[]
+  chatConversations     ChatConversation[] @relation("CustomerChatConversations")
+  assignedConversations ChatConversation[] @relation("AssignedAdminChatConversations")
+  chatMessages          ChatMessage[]
+  orders                Order[]
+  refreshTokens         RefreshToken[]
+  wishlistItems         WishlistItem[]
+
+  @@index([id], map: "idx_users_active", where: raw("(is_active AND (deleted_at IS NULL))"))
+  @@index([roleId], map: "idx_users_role_id")
+  @@map("users")
+}
+
+model VariantAttributeValue {
+  variantId        String   @map("variant_id") @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  attributeTypeId  String   @map("attribute_type_id") @db.Uuid
+  attributeValueId String   @map("attribute_value_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  productAttributeValue ProductAttributeValue @relation(fields: [productId, attributeTypeId, attributeValueId], references: [productId, attributeTypeId, attributeValueId], onDelete: Cascade, onUpdate: NoAction)
+  variant               ProductVariant        @relation(fields: [variantId, productId], references: [id, productId], onUpdate: NoAction)
+
+  @@id([variantId, attributeTypeId])
+  @@index([attributeTypeId, attributeValueId, productId, variantId], map: "idx_variant_attribute_values_filter")
+  @@map("variant_attribute_values")
+}
+
+model WishlistItem {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  variantId String?  @map("variant_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  product Product         @relation(fields: [productId], references: [id], onUpdate: NoAction)
+  variant ProductVariant? @relation(fields: [variantId, productId], references: [id, productId], onUpdate: NoAction)
+
+  @@unique([userId, productId], map: "uq_wishlist_product_level", where: raw("(variant_id IS NULL)"))
+  @@unique([userId, productId, variantId], map: "uq_wishlist_variant_level", where: raw("(variant_id IS NOT NULL)"))
+  @@index([userId, createdAt(sort: Desc)], map: "idx_wishlist_items_user_created")
+  @@index([variantId, productId], map: "idx_wishlist_items_variant", where: raw("(variant_id IS NOT NULL)"))
+  @@map("wishlist_items")
+}
+
+enum ChatConversationStatus {
+  open
+  closed
+  archived
+
+  @@map("chat_conversation_status")
+}
+
+enum OrderStatus {
+  pending
+  confirmed
+  shipped
+  delivered
+  cancelled
+
+  @@map("order_status")
+}

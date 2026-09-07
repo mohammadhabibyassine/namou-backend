@@ -1,0 +1,37 @@
+name: namou-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: namou-postgres
+    environment:
+      POSTGRES_DB: namou
+      POSTGRES_USER: namou
+      POSTGRES_PASSWORD: namou_dev_password
+    ports:
+      - '127.0.0.1:15432:5432'
+    volumes:
+      - namou-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U namou -d namou']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: namou-redis
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:16379:6379'
+    volumes:
+      - namou-redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  namou-postgres-data:
+  namou-redis-data:

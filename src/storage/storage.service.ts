@@ -68,6 +68,14 @@ export class StorageService {
     contentType: AllowedImageContentType;
     fileSizeBytes: number;
   }): Promise<PresignedProductUploadResult> {
+    if (
+      params.fileSizeBytes < 1 ||
+      params.fileSizeBytes > MAX_PRODUCT_IMAGE_SIZE_BYTES
+    ) {
+      throw new BadRequestException(
+        'Product image must be between 1 byte and 10 MB',
+      );
+    }
     await this.assertProductExists(params.productId);
 
     const extension = CONTENT_TYPE_TO_EXTENSION[params.contentType];
@@ -77,7 +85,8 @@ export class StorageService {
       Bucket: this.bucketName,
       Key: objectKey,
       ContentType: params.contentType,
-      ContentLength: params.fileSizeBytes,
+      // Do not sign ContentLength: browsers cannot set this forbidden header.
+      // The uploaded size is verified with HeadObject before attachment.
       CacheControl: PRODUCT_IMAGE_CACHE_CONTROL,
       Metadata: { productId: params.productId },
     });
@@ -103,6 +112,19 @@ export class StorageService {
     objectKey: string,
   ): Promise<string> {
     this.assertProductObjectKey(productId, objectKey);
+
+    const pendingDeletion =
+      await this.prisma.storageObjectDeletionOutbox.findUnique({
+        where: {
+          productId_objectKey: { productId, objectKey },
+        },
+        select: { completedAt: true },
+      });
+    if (pendingDeletion?.completedAt === null) {
+      throw new BadRequestException(
+        'This uploaded product image is pending cleanup',
+      );
+    }
 
     let object: HeadObjectCommandOutput;
     try {
@@ -165,18 +187,51 @@ export class StorageService {
         );
       }
 
-      // Image attachment also locks the product row. Keeping the external
-      // delete inside this transaction closes the check-then-delete race.
-      await this.s3.send(
-        new DeleteObjectsCommand({
-          Bucket: this.bucketName,
-          Delete: {
-            Objects: uniqueKeys.map((Key) => ({ Key })),
-            Quiet: true,
-          },
-        }),
-      );
+      await tx.storageObjectDeletionOutbox.createMany({
+        data: uniqueKeys.map((objectKey) => ({ productId, objectKey })),
+        skipDuplicates: true,
+      });
     });
+  }
+
+  getProductObjectKey(productId: string, imageUrl: string): string | null {
+    const prefix = `${this.publicUrl}/products/${productId}/`;
+    if (!imageUrl.startsWith(prefix)) return null;
+
+    const objectKey = imageUrl.slice(this.publicUrl.length + 1);
+    try {
+      this.assertProductObjectKey(productId, objectKey);
+      return objectKey;
+    } catch {
+      return null;
+    }
+  }
+
+  async isProductObjectAttached(
+    productId: string,
+    objectKey: string,
+  ): Promise<boolean> {
+    return (
+      (await this.prisma.productImage.count({
+        where: {
+          productId,
+          imageUrl: this.buildPublicUrl(objectKey),
+        },
+      })) > 0
+    );
+  }
+
+  async deleteProductObject(
+    productId: string,
+    objectKey: string,
+  ): Promise<void> {
+    this.assertProductObjectKey(productId, objectKey);
+    await this.s3.send(
+      new DeleteObjectsCommand({
+        Bucket: this.bucketName,
+        Delete: { Objects: [{ Key: objectKey }], Quiet: true },
+      }),
+    );
   }
 
   private async lockProduct(

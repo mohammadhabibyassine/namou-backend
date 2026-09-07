@@ -16,7 +16,9 @@ describe('OrderJobsService', () => {
   const prisma = {
     orderNotificationOutbox: { findUnique, findMany, updateMany },
   } as unknown as PrismaService;
-  const service = new OrderJobsService(queue, prisma);
+  const service = new OrderJobsService(queue, prisma, {
+    pendingTtlMinutes: 30,
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();

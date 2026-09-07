@@ -15,6 +15,7 @@ import { AccessTokenVerifier } from './jwt/access-token-verifier.js';
 import { Argon2PasswordHasher } from './password/argon2-password-hasher.js';
 import { PasswordHasher } from './password/password-hasher.js';
 import { AuthTokensService } from './tokens/auth-tokens.service.js';
+import { RefreshTokenCleanupService } from './tokens/refresh-token-cleanup.service.js';
 import { ACCESS_TOKEN_ALGORITHM } from './tokens/token.constants.js';
 
 @Module({
@@ -44,6 +45,7 @@ import { ACCESS_TOKEN_ALGORITHM } from './tokens/token.constants.js';
   providers: [
     AuthService,
     AuthTokensService,
+    RefreshTokenCleanupService,
     JwtStrategy,
     AccessTokenVerifier,
     {

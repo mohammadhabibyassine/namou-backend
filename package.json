@@ -60,9 +60,11 @@
     "dotenv": "^17.4.2",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.23.0",
+    "rate-limit-redis": "^6.0.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.3"
@@ -85,5 +87,9 @@
     "supertest": "^7.0.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2",
+    "mysql2": "3.24.3"
   }
 }

@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Job, UnrecoverableError } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { OrderStatus } from '../generated/prisma/enums.js';
 import {
   OrderNotificationKind,
   OrderQueue,
@@ -30,11 +31,27 @@ export class OrderConfirmationProcessor extends WorkerHost {
         select: {
           id: true,
           orderNumber: true,
+          status: true,
           user: { select: { email: true } },
         },
       });
       if (!order) {
         throw new UnrecoverableError('Order no longer exists');
+      }
+      if (order.status === OrderStatus.cancelled) {
+        await this.prisma.orderNotificationOutbox.updateMany({
+          where: {
+            orderId: order.id,
+            kind: OrderNotificationKind.Confirmation,
+            completedAt: null,
+          },
+          data: {
+            completedAt: new Date(),
+            queuedAt: null,
+            lastError: 'Order was cancelled before confirmation was delivered',
+          },
+        });
+        return;
       }
 
       // This is the delivery-provider boundary. A real mail/SMS adapter can be

@@ -6,6 +6,13 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { Prisma } from '../generated/prisma/client.js';
+import { OrderStatus } from '../generated/prisma/enums.js';
+import {
+  ordersConfig,
+  type OrdersConfiguration,
+} from '../config/orders.config.js';
+import { Inject } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import {
   OrderNotificationKind,
@@ -22,15 +29,83 @@ export class OrderJobsService implements OnModuleInit, OnModuleDestroy {
     @InjectQueue(OrderQueue.Name)
     private readonly queue: Queue<OrderConfirmationJobData>,
     private readonly prisma: PrismaService,
+    @Inject(ordersConfig.KEY)
+    private readonly config: OrdersConfiguration,
   ) {}
 
   onModuleInit(): void {
     void this.publishPendingConfirmations();
-    this.retryTimer = setInterval(
-      () => void this.publishPendingConfirmations(),
-      10_000,
-    );
+    void this.expirePendingOrders();
+    this.retryTimer = setInterval(() => {
+      void this.publishPendingConfirmations();
+      void this.expirePendingOrders();
+    }, 10_000);
     this.retryTimer.unref();
+  }
+
+  private async expirePendingOrders(): Promise<void> {
+    try {
+      const cutoff = new Date(
+        Date.now() - this.config.pendingTtlMinutes * 60_000,
+      );
+      const candidates = await this.prisma.order.findMany({
+        where: { status: OrderStatus.pending, createdAt: { lt: cutoff } },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+        select: { id: true },
+      });
+      for (const candidate of candidates) {
+        await this.expirePendingOrder(candidate.id);
+      }
+    } catch (error: unknown) {
+      this.logger.error(
+        'Could not expire pending orders',
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  private async expirePendingOrder(orderId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<
+        Array<{ id: string; status: OrderStatus }>
+      >(Prisma.sql`
+        SELECT id, status
+        FROM orders
+        WHERE id = ${orderId}::uuid
+        FOR UPDATE
+      `);
+      if (rows[0]?.status !== OrderStatus.pending) return;
+
+      const items = await tx.orderItem.findMany({
+        where: { orderId },
+        select: { variantId: true, quantity: true },
+      });
+      for (const item of items) {
+        await tx.productVariant.update({
+          where: { id: item.variantId },
+          data: { stockQuantity: { increment: item.quantity } },
+          select: { id: true },
+        });
+      }
+      await tx.order.update({
+        where: { id: orderId, status: OrderStatus.pending },
+        data: { status: OrderStatus.cancelled },
+        select: { id: true },
+      });
+      await tx.orderNotificationOutbox.updateMany({
+        where: {
+          orderId,
+          kind: OrderNotificationKind.Confirmation,
+          completedAt: null,
+        },
+        data: {
+          completedAt: new Date(),
+          queuedAt: null,
+          lastError: 'Order expired before confirmation was delivered',
+        },
+      });
+    });
   }
 
   onModuleDestroy(): void {

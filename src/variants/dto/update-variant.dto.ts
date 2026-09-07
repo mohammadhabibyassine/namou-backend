@@ -40,4 +40,10 @@ export class UpdateVariantDto {
   @Min(0)
   @Max(POSTGRES_INTEGER_MAX)
   stockQuantity?: number;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsInt()
+  @Min(0)
+  @Max(POSTGRES_INTEGER_MAX)
+  expectedStockQuantity?: number;
 }

@@ -28,6 +28,12 @@ class EnvironmentVariables {
   @Max(65_535)
   PORT = 3000;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  TRUST_PROXY_HOPS = 0;
+
   @IsUrl({
     protocols: ['postgresql', 'postgres'],
     require_protocol: true,
@@ -68,6 +74,12 @@ class EnvironmentVariables {
   @Min(1)
   @Max(365)
   REFRESH_TOKEN_TTL_DAYS = 30;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(10_080)
+  PENDING_ORDER_TTL_MINUTES = 30;
 
   @IsString()
   @MinLength(1)

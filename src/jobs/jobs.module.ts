@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ordersConfig } from '../config/orders.config.js';
 import {
   redisConfig,
   type RedisConfiguration,
@@ -14,6 +15,7 @@ import { OrderJobsService } from './order-jobs.service.js';
 @Module({
   imports: [
     ConfigModule.forFeature(redisConfig),
+    ConfigModule.forFeature(ordersConfig),
     PrismaModule,
     BullModule.forRootAsync({
       imports: [ConfigModule.forFeature(redisConfig)],

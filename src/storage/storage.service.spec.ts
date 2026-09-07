@@ -54,15 +54,19 @@ const TEST_CONFIG: StorageConfiguration = {
 describe('StorageService', () => {
   const productFindFirst = vi.fn();
   const productImageCount = vi.fn();
+  const storageDeletionFindUnique = vi.fn();
+  const storageDeletionCreateMany = vi.fn();
   const queryRaw = vi.fn();
   const transaction = vi.fn();
   const tx = {
     $queryRaw: queryRaw,
     productImage: { count: productImageCount },
+    storageObjectDeletionOutbox: { createMany: storageDeletionCreateMany },
   };
   const prisma = {
     product: { findFirst: productFindFirst },
     productImage: { count: productImageCount },
+    storageObjectDeletionOutbox: { findUnique: storageDeletionFindUnique },
     $transaction: transaction,
   } as unknown as PrismaService;
   let service: StorageService;
@@ -71,6 +75,8 @@ describe('StorageService', () => {
     vi.clearAllMocks();
     productFindFirst.mockResolvedValue({ id: PRODUCT_ID });
     productImageCount.mockResolvedValue(0);
+    storageDeletionFindUnique.mockResolvedValue(null);
+    storageDeletionCreateMany.mockResolvedValue({ count: 1 });
     queryRaw.mockResolvedValue([{ id: PRODUCT_ID }]);
     transaction.mockImplementation(
       async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
@@ -108,7 +114,6 @@ describe('StorageService', () => {
         expect.objectContaining({
           input: expect.objectContaining({
             Bucket: 'test-bucket',
-            ContentLength: 1_024,
             ContentType: contentType,
             CacheControl: PRODUCT_IMAGE_CACHE_CONTROL,
             Metadata: { productId: PRODUCT_ID },
@@ -179,19 +184,14 @@ describe('StorageService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('deletes failed uploads when they are not attached', async () => {
-    sendMock.mockResolvedValue({});
-
+  it('queues failed uploads for asynchronous deletion when they are not attached', async () => {
     await service.deleteUnattachedProductObjects(PRODUCT_ID, [OBJECT_KEY]);
 
-    expect(sendMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: {
-          Bucket: 'test-bucket',
-          Delete: { Objects: [{ Key: OBJECT_KEY }], Quiet: true },
-        },
-      }),
-    );
+    expect(storageDeletionCreateMany).toHaveBeenCalledWith({
+      data: [{ productId: PRODUCT_ID, objectKey: OBJECT_KEY }],
+      skipDuplicates: true,
+    });
+    expect(sendMock).not.toHaveBeenCalled();
     expect(queryRaw).toHaveBeenCalled();
   });
 
@@ -202,5 +202,6 @@ describe('StorageService', () => {
       service.deleteUnattachedProductObjects(PRODUCT_ID, [OBJECT_KEY]),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(sendMock).not.toHaveBeenCalled();
+    expect(storageDeletionCreateMany).not.toHaveBeenCalled();
   });
 });

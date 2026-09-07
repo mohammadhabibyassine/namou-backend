@@ -220,23 +220,53 @@ export class VariantsService {
     ) {
       throw new BadRequestException('At least one variant field is required');
     }
+    if (
+      input.stockQuantity !== undefined &&
+      input.expectedStockQuantity === undefined
+    ) {
+      throw new BadRequestException(
+        'expectedStockQuantity is required when changing stock quantity',
+      );
+    }
 
     try {
-      const variant = await this.prisma.productVariant.update({
-        where: {
-          id: variantId,
-          productId,
-          deletedAt: null,
-          product: { deletedAt: null },
-        },
-        data: {
-          sku: input.sku === undefined ? undefined : normalizeSku(input.sku),
-          priceOverride:
-            input.priceOverride === undefined ? undefined : input.priceOverride,
-          stockQuantity: input.stockQuantity,
-        },
-        select: ADMIN_VARIANT_SELECT,
-      });
+      const variant = await this.prisma.$transaction(async (tx) => {
+        const rows = await tx.$queryRaw<
+          Array<{ id: string; stockQuantity: number }>
+        >(Prisma.sql`
+          SELECT v.id, v.stock_quantity AS "stockQuantity"
+          FROM product_variants AS v
+          JOIN products AS p ON p.id = v.product_id
+          WHERE v.id = ${variantId}::uuid
+            AND v.product_id = ${productId}::uuid
+            AND v.deleted_at IS NULL
+            AND p.deleted_at IS NULL
+          FOR UPDATE OF v
+        `);
+        const current = rows[0];
+        if (!current) throw new NotFoundException('Variant not found');
+        if (
+          input.stockQuantity !== undefined &&
+          current.stockQuantity !== input.expectedStockQuantity
+        ) {
+          throw new ConflictException(
+            'Stock changed since it was loaded; refresh and try again',
+          );
+        }
+
+        return tx.productVariant.update({
+          where: { id: variantId, productId, deletedAt: null },
+          data: {
+            sku: input.sku === undefined ? undefined : normalizeSku(input.sku),
+            priceOverride:
+              input.priceOverride === undefined
+                ? undefined
+                : input.priceOverride,
+            stockQuantity: input.stockQuantity,
+          },
+          select: ADMIN_VARIANT_SELECT,
+        });
+      }, WRITE_TRANSACTION_OPTIONS);
       await this.invalidateCatalog();
       return this.toVariantView(variant);
     } catch (error: unknown) {
@@ -371,6 +401,24 @@ export class VariantsService {
         await tx.productImage.deleteMany({
           where: { productId, id: { notIn: ids } },
         });
+        const removedObjectKeys = existing
+          .filter(({ id }) => !ids.includes(id))
+          .flatMap(({ imageUrl }) => {
+            const objectKey = this.storage.getProductObjectKey(
+              productId,
+              imageUrl,
+            );
+            return objectKey ? [objectKey] : [];
+          });
+        if (removedObjectKeys.length > 0) {
+          await tx.storageObjectDeletionOutbox.createMany({
+            data: removedObjectKeys.map((objectKey) => ({
+              productId,
+              objectKey,
+            })),
+            skipDuplicates: true,
+          });
+        }
         for (const image of input.images) {
           const imageUrl = image.id
             ? existingImages.get(image.id)?.imageUrl

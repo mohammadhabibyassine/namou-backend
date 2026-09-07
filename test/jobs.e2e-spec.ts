@@ -26,7 +26,7 @@ describe('BullMQ order jobs (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue({
-        order: { findUnique },
+        order: { findUnique, findMany },
         orderNotificationOutbox: { findUnique, findMany, updateMany },
       })
       .compile();

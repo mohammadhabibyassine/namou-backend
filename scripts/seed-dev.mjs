@@ -10,6 +10,26 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
+const nodeEnvironment = process.env.NODE_ENV ?? 'development';
+const allowDestructiveSeed = process.env.ALLOW_DESTRUCTIVE_SEED === 'true';
+const database = new URL(databaseUrl);
+const databaseName = database.pathname.replace(/^\//, '');
+const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
+
+if (nodeEnvironment === 'production') {
+  throw new Error('The development seed cannot run in production');
+}
+if (!allowDestructiveSeed) {
+  throw new Error(
+    'Refusing destructive seed. Set ALLOW_DESTRUCTIVE_SEED=true explicitly',
+  );
+}
+if (!localHosts.has(database.hostname) || !/^namou(?:[-_](?:dev|test))?$/.test(databaseName)) {
+  throw new Error(
+    'Refusing destructive seed unless DATABASE_URL points to a local namou database',
+  );
+}
+
 function toPgUrl(url) {
   const parsed = new URL(url);
   parsed.searchParams.delete('schema');

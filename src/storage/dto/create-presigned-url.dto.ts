@@ -1,10 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsInt,
-  IsIn,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsInt, IsIn, Max, Min } from 'class-validator';
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   MAX_PRODUCT_IMAGE_SIZE_BYTES,

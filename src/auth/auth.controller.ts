@@ -1,12 +1,15 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
   Post,
 } from '@nestjs/common';
 import { AuthService } from './auth.service.js';
+import { CurrentUser } from './decorators/current-user.decorator.js';
+import type { AuthenticatedUser, AuthSessionResult } from './auth.types.js';
 import type {
   LoginResult,
   RegistrationResult,
@@ -25,6 +28,17 @@ export class AuthController {
   @Public()
   register(@Body() input: RegisterDto): Promise<RegistrationResult> {
     return this.authService.register(input);
+  }
+
+  @Get('session')
+  session(@CurrentUser() user: AuthenticatedUser): AuthSessionResult {
+    return {
+      user: {
+        id: user.userId,
+        role: user.roleName,
+        permissions: user.permissions,
+      },
+    };
   }
 
   @Post('login')

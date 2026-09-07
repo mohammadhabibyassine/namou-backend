@@ -65,11 +65,7 @@ describe('Commerce database workflows (e2e)', () => {
             new ProductsRepository(client),
             noOpCache,
           );
-          const variants = new VariantsService(
-            client,
-            noOpCache,
-            noOpStorage,
-          );
+          const variants = new VariantsService(client, noOpCache, noOpStorage);
           const users = new UsersService(client);
           const cart = new CartService(client);
           const wishlist = new WishlistService(client);

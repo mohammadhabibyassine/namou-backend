@@ -43,6 +43,9 @@ class EnvironmentVariables {
   REDIS_URL = 'redis://localhost:6379';
 
   @IsString()
+  CORS_ORIGINS = '';
+
+  @IsString()
   @MinLength(32)
   JWT_ACCESS_SECRET: string;
 

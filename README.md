@@ -38,21 +38,11 @@ explicitly by the deployment environment.
 
 ## Frontend
 
-The production-oriented Next.js storefront lives in
-[`frontend/`](frontend/README.md). It runs on port `3001`, uses this API on port
-`3000`, and implements the approved kinetic-modular UI across the storefront,
-identity, account, checkout, orders, realtime support, and permission-scoped
-admin areas. It includes typed API adapters, an HttpOnly token BFF,
-authorization helpers, a persistent Zustand guest-commerce store, TanStack
-Query server state, and the Socket.IO chat client. The source mockups remain in
-`design/kinetic-modular-system` as the visual reference.
-
-```bash
-cd frontend
-nvm use
-npm install
-npm run dev
-```
+The production-oriented Next.js storefront lives in the separate
+`namou-frontend` repository. In this workspace it is located at
+`/Users/mohammadyassin/Documents/namou-frontend`. It runs on port `3001`, uses
+this API on port `3000`, and implements the storefront, identity, account,
+checkout, orders, realtime support, and permission-scoped admin areas.
 
 ## Feature modules
 
@@ -90,7 +80,8 @@ cross-row invariants and atomic checkout already defined in the migration.
 | Customer chat        | `GET/POST /chat/conversations`, message, read, and close routes under `/:conversationId`                                    |
 | Chat administration  | `GET /admin/chat/conversations`, assignment, message, read, and status routes under `/:conversationId`                      |
 
-Interactive OpenAPI documentation is served at `/docs`; its machine-readable
+Liveness is available at `/health/live`; database readiness is available at
+`/health/ready`. Interactive OpenAPI documentation is served at `/docs`; its machine-readable
 document is available at `/docs/openapi.json`.
 
 All routes are authenticated by default. Public routes opt out explicitly.
@@ -118,11 +109,11 @@ and the worker retries transient failures three times with exponential backoff.
 The processor currently establishes the notification-provider boundary and
 logs the prepared confirmation; an email/SMS adapter can be injected there.
 
-Because the finalized schema has no transactional outbox table, PostgreSQL and
-Redis cannot participate in one atomic commit. A queue outage is logged and
-does not turn an already-committed order into a failed checkout response. A
-production version that guarantees eventual publication should add an outbox
-in a future tracked migration.
+Checkout writes an order-confirmation outbox row in the same PostgreSQL
+transaction as the order. A publisher retries unqueued rows when Redis is
+temporarily unavailable, and the worker marks the row complete after preparing
+the notification. The actual email/SMS provider remains an intentional future
+integration.
 
 ## Live chat
 
@@ -159,4 +150,5 @@ Prisma resolves nested relations on its single transaction connection. This is
 tracked upstream in [prisma/prisma#29407](https://github.com/prisma/prisma/issues/29407);
 the queries still complete, and the application does not launch work with
 unawaited promises.
+
 # namou-backend

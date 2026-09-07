@@ -316,15 +316,20 @@ export class VariantsService {
       image.objectKey ? [image.objectKey] : [],
     );
     if (new Set(objectKeys).size !== objectKeys.length) {
-      throw new BadRequestException('Uploaded image object keys must be unique');
+      throw new BadRequestException(
+        'Uploaded image object keys must be unique',
+      );
     }
 
     const uploadedImageUrls = new Map(
       await Promise.all(
-        objectKeys.map(async (objectKey) => [
-          objectKey,
-          await this.storage.verifyProductObject(productId, objectKey),
-        ] as const),
+        objectKeys.map(
+          async (objectKey) =>
+            [
+              objectKey,
+              await this.storage.verifyProductObject(productId, objectKey),
+            ] as const,
+        ),
       ),
     );
 
@@ -371,7 +376,9 @@ export class VariantsService {
             ? existingImages.get(image.id)?.imageUrl
             : uploadedImageUrls.get(image.objectKey ?? '');
           if (!imageUrl) {
-            throw new BadRequestException('Product image could not be resolved');
+            throw new BadRequestException(
+              'Product image could not be resolved',
+            );
           }
           const data = {
             imageUrl,

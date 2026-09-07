@@ -54,6 +54,14 @@ export class ProductsController {
     return this.productsAdminService.update(productId, input);
   }
 
+  @Get('admin/:id')
+  @RequirePermissions(Permission.ManageProducts)
+  findAdminById(
+    @Param('id', UUID_V4_PIPE) productId: string,
+  ): Promise<ProductAdminView> {
+    return this.productsAdminService.findById(productId);
+  }
+
   @Delete(':id')
   @RequirePermissions(Permission.ManageProducts)
   @HttpCode(HttpStatus.NO_CONTENT)

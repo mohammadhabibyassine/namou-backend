@@ -35,3 +35,11 @@ export interface LoginResult extends TokenPair {
     permissions: string[];
   };
 }
+
+export interface AuthSessionResult {
+  user: {
+    id: string;
+    role: string;
+    permissions: string[];
+  };
+}

@@ -19,6 +19,7 @@ import {
 } from '../prisma/prisma-error.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { OrderJobsService } from '../jobs/order-jobs.service.js';
+import { OrderNotificationKind } from '../jobs/order-jobs.constants.js';
 import { ApplicationCacheService } from '../cache/application-cache.service.js';
 import { CacheNamespace } from '../cache/cache.constants.js';
 import type { CheckoutDto } from './dto/checkout.dto.js';
@@ -90,6 +91,13 @@ export class OrdersService {
 
         await tx.cartItem.deleteMany({
           where: { id: { in: cartItems.map(({ id }) => id) }, userId },
+        });
+        await tx.orderNotificationOutbox.create({
+          data: {
+            orderId: createdOrderId,
+            kind: OrderNotificationKind.Confirmation,
+          },
+          select: { id: true },
         });
         return createdOrderId;
       }, WRITE_TRANSACTION_OPTIONS);

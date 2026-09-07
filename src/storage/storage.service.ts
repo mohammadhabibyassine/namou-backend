@@ -18,6 +18,7 @@ import {
   type StorageConfiguration,
 } from '../config/storage.config.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { Prisma } from '../generated/prisma/client.js';
 import {
   ALLOWED_IMAGE_CONTENT_TYPES,
   MAX_PRODUCT_IMAGE_SIZE_BYTES,
@@ -112,7 +113,9 @@ export class StorageService {
         }),
       );
     } catch {
-      throw new BadRequestException('Uploaded product image could not be found');
+      throw new BadRequestException(
+        'Uploaded product image could not be found',
+      );
     }
 
     const contentType = object.ContentType?.split(';', 1)[0]?.trim();
@@ -122,7 +125,9 @@ export class StorageService {
         contentType as AllowedImageContentType,
       )
     ) {
-      throw new BadRequestException('Uploaded product image type is not allowed');
+      throw new BadRequestException(
+        'Uploaded product image type is not allowed',
+      );
     }
     if (
       !object.ContentLength ||
@@ -131,7 +136,9 @@ export class StorageService {
       throw new BadRequestException('Uploaded product image exceeds 10 MB');
     }
     if (object.CacheControl !== PRODUCT_IMAGE_CACHE_CONTROL) {
-      throw new BadRequestException('Uploaded product image cache policy is invalid');
+      throw new BadRequestException(
+        'Uploaded product image cache policy is invalid',
+      );
     }
 
     return this.buildPublicUrl(objectKey);
@@ -142,28 +149,47 @@ export class StorageService {
     productId: string,
     objectKeys: string[],
   ): Promise<void> {
-    await this.assertProductExists(productId);
     const uniqueKeys = [...new Set(objectKeys)];
     uniqueKeys.forEach((key) => this.assertProductObjectKey(productId, key));
     if (uniqueKeys.length === 0) return;
 
-    const imageUrls = uniqueKeys.map((key) => this.buildPublicUrl(key));
-    const attachedCount = await this.prisma.productImage.count({
-      where: { productId, imageUrl: { in: imageUrls } },
-    });
-    if (attachedCount > 0) {
-      throw new BadRequestException('Attached product images cannot be deleted');
-    }
+    await this.prisma.$transaction(async (tx) => {
+      await this.lockProduct(tx, productId);
+      const imageUrls = uniqueKeys.map((key) => this.buildPublicUrl(key));
+      const attachedCount = await tx.productImage.count({
+        where: { productId, imageUrl: { in: imageUrls } },
+      });
+      if (attachedCount > 0) {
+        throw new BadRequestException(
+          'Attached product images cannot be deleted',
+        );
+      }
 
-    await this.s3.send(
-      new DeleteObjectsCommand({
-        Bucket: this.bucketName,
-        Delete: {
-          Objects: uniqueKeys.map((Key) => ({ Key })),
-          Quiet: true,
-        },
-      }),
-    );
+      // Image attachment also locks the product row. Keeping the external
+      // delete inside this transaction closes the check-then-delete race.
+      await this.s3.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucketName,
+          Delete: {
+            Objects: uniqueKeys.map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        }),
+      );
+    });
+  }
+
+  private async lockProduct(
+    tx: Prisma.TransactionClient,
+    productId: string,
+  ): Promise<void> {
+    const rows = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+      SELECT id
+      FROM products
+      WHERE id = ${productId}::uuid AND deleted_at IS NULL
+      FOR UPDATE
+    `);
+    if (!rows[0]) throw new NotFoundException('Product not found');
   }
 
   /**

@@ -115,12 +115,18 @@ export class ChatGateway implements OnGatewayInit {
     } catch (error: unknown) {
       if (error instanceof WsException) throw error;
       const httpError = error as Partial<HttpException>;
+      const status =
+        typeof httpError.getStatus === 'function'
+          ? httpError.getStatus()
+          : undefined;
       throw new WsException({
-        code:
-          typeof httpError.getStatus === 'function'
-            ? httpError.getStatus()
-            : 'CHAT_ERROR',
-        message: error instanceof Error ? error.message : 'Chat request failed',
+        code: status ?? 'CHAT_ERROR',
+        message:
+          status === 401
+            ? 'Unauthorized'
+            : status === 403
+              ? 'Forbidden'
+              : 'Chat request failed',
       });
     }
   }

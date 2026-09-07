@@ -16,13 +16,19 @@ describe('BullMQ order jobs (e2e)', () => {
   let queue: Queue<OrderConfirmationJobData>;
   let orderJobs: OrderJobsService;
   const findUnique = vi.fn();
+  const findMany = vi.fn();
+  const updateMany = vi.fn();
 
   beforeAll(async () => {
+    findMany.mockResolvedValue([]);
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [JobsModule],
     })
       .overrideProvider(PrismaService)
-      .useValue({ order: { findUnique } })
+      .useValue({
+        order: { findUnique },
+        orderNotificationOutbox: { findUnique, findMany, updateMany },
+      })
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();

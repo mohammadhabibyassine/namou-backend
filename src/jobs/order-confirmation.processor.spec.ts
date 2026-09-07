@@ -9,7 +9,11 @@ describe('OrderConfirmationProcessor', () => {
     .spyOn(Logger.prototype, 'log')
     .mockImplementation(() => undefined);
   const findUnique = vi.fn();
-  const prisma = { order: { findUnique } } as unknown as PrismaService;
+  const updateMany = vi.fn();
+  const prisma = {
+    order: { findUnique },
+    orderNotificationOutbox: { updateMany },
+  } as unknown as PrismaService;
   const processor = new OrderConfirmationProcessor(prisma);
 
   beforeEach(() => {
@@ -24,6 +28,7 @@ describe('OrderConfirmationProcessor', () => {
       orderNumber: 'ORD-TEST',
       user: { email: 'customer@example.com' },
     });
+    updateMany.mockResolvedValue({ count: 1 });
 
     await expect(
       processor.process({

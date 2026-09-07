@@ -176,10 +176,29 @@ model Order {
   user          User                 @relation(fields: [userId], references: [id], onUpdate: NoAction)
   items         OrderItem[]
   statusHistory OrderStatusHistory[]
+  notifications OrderNotificationOutbox[]
 
   @@index([status, createdAt(sort: Desc)], map: "idx_orders_status_created")
   @@index([userId, createdAt(sort: Desc)], map: "idx_orders_user_created")
   @@map("orders")
+}
+
+model OrderNotificationOutbox {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId     String    @map("order_id") @db.Uuid
+  kind        String    @db.VarChar(50)
+  queuedAt    DateTime? @map("queued_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([orderId, kind])
+  @@index([completedAt, queuedAt, createdAt], map: "idx_order_notification_outbox_pending")
+  @@map("order_notification_outbox")
 }
 
 model Permission {

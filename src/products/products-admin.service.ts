@@ -74,6 +74,18 @@ export class ProductsAdminService {
     private readonly cache: ApplicationCacheService,
   ) {}
 
+  async findById(productId: string): Promise<ProductAdminView> {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId, deletedAt: null },
+      select: PRODUCT_ADMIN_SELECT,
+    });
+    if (!product) {
+      throw this.productNotFound();
+    }
+
+    return this.toAdminView(product);
+  }
+
   async create(input: CreateProductDto): Promise<ProductCreatedResult> {
     const product = this.prepareAndValidate(input);
 

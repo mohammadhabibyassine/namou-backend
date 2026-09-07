@@ -36,6 +36,8 @@ describe('AppController (e2e)', () => {
     expect(response.body).toMatchObject({
       info: { title: 'namou API', version: '1.0' },
       paths: expect.objectContaining({
+        '/health/live': expect.any(Object),
+        '/health/ready': expect.any(Object),
         '/products': expect.any(Object),
         '/orders/checkout': expect.any(Object),
         '/chat/conversations': expect.any(Object),

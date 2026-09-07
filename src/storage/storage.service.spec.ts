@@ -54,9 +54,16 @@ const TEST_CONFIG: StorageConfiguration = {
 describe('StorageService', () => {
   const productFindFirst = vi.fn();
   const productImageCount = vi.fn();
+  const queryRaw = vi.fn();
+  const transaction = vi.fn();
+  const tx = {
+    $queryRaw: queryRaw,
+    productImage: { count: productImageCount },
+  };
   const prisma = {
     product: { findFirst: productFindFirst },
     productImage: { count: productImageCount },
+    $transaction: transaction,
   } as unknown as PrismaService;
   let service: StorageService;
 
@@ -64,6 +71,10 @@ describe('StorageService', () => {
     vi.clearAllMocks();
     productFindFirst.mockResolvedValue({ id: PRODUCT_ID });
     productImageCount.mockResolvedValue(0);
+    queryRaw.mockResolvedValue([{ id: PRODUCT_ID }]);
+    transaction.mockImplementation(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+    );
     getSignedUrlMock.mockResolvedValue(
       'https://test-bucket.r2.cloudflarestorage.com/signed-url',
     );
@@ -75,35 +86,38 @@ describe('StorageService', () => {
     ['image/png', 'png'],
     ['image/webp', 'webp'],
     ['image/avif', 'avif'],
-  ] as const)('presigns a product-scoped %s upload', async (contentType, ext) => {
-    const result = await service.createProductUploadUrl({
-      productId: PRODUCT_ID,
-      contentType,
-      fileSizeBytes: 1_024,
-    });
+  ] as const)(
+    'presigns a product-scoped %s upload',
+    async (contentType, ext) => {
+      const result = await service.createProductUploadUrl({
+        productId: PRODUCT_ID,
+        contentType,
+        fileSizeBytes: 1_024,
+      });
 
-    expect(result.objectKey).toBe(
-      `products/${PRODUCT_ID}/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.${ext}`,
-    );
-    expect(result.publicUrl).toBe(`https://cdn.test.com/${result.objectKey}`);
-    expect(result.uploadHeaders).toEqual({
-      'Content-Type': contentType,
-      'Cache-Control': PRODUCT_IMAGE_CACHE_CONTROL,
-    });
-    expect(getSignedUrlMock).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        input: expect.objectContaining({
-          Bucket: 'test-bucket',
-          ContentLength: 1_024,
-          ContentType: contentType,
-          CacheControl: PRODUCT_IMAGE_CACHE_CONTROL,
-          Metadata: { productId: PRODUCT_ID },
+      expect(result.objectKey).toBe(
+        `products/${PRODUCT_ID}/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.${ext}`,
+      );
+      expect(result.publicUrl).toBe(`https://cdn.test.com/${result.objectKey}`);
+      expect(result.uploadHeaders).toEqual({
+        'Content-Type': contentType,
+        'Cache-Control': PRODUCT_IMAGE_CACHE_CONTROL,
+      });
+      expect(getSignedUrlMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          input: expect.objectContaining({
+            Bucket: 'test-bucket',
+            ContentLength: 1_024,
+            ContentType: contentType,
+            CacheControl: PRODUCT_IMAGE_CACHE_CONTROL,
+            Metadata: { productId: PRODUCT_ID },
+          }),
         }),
-      }),
-      { expiresIn: 600 },
-    );
-  });
+        { expiresIn: 600 },
+      );
+    },
+  );
 
   it('does not sign uploads for missing products', async () => {
     productFindFirst.mockResolvedValue(null);
@@ -178,6 +192,7 @@ describe('StorageService', () => {
         },
       }),
     );
+    expect(queryRaw).toHaveBeenCalled();
   });
 
   it('never deletes an attached catalog image', async () => {
